@@ -60,16 +60,25 @@ int main(){
 					packet >> playerList[i]->name >> tempState;
 					playerList[i]->currentState = (PlayerInfo::STATE)tempState;
 					if (playerList[i]->currentState == PlayerInfo::STATE::Host) {
-						std::string matchName;
-						int turns;
-						int maxTime;
-						int maxFleetSize;
+						std::string matchName = "";
+						int turns = 0;
+						int maxTime = 0;
+						int maxFleetSize = 0;
 						packet >> matchName >> turns >> maxTime >> maxFleetSize;
 						matchList.push_back(new Match(matchID, matchName, turns, maxTime, maxFleetSize));
+						std::cout << matchList[matchID]->id << "  -  " << matchList[matchID]->matchName << "  " << matchList[matchID]->currentPlayers << "/2" << std::endl;
+
 						matchID++;
 					}
-					else {
+
+					else if(playerList[i]->currentState == PlayerInfo::STATE::Search) {
 						//SEND ALL MATCHES AVAILABLES
+						packet.clear();
+						packet << matchList.size();
+						for (int i = 0; i < matchList.size(); i++) {
+							packet << matchList[i]->id << matchList[i]->matchName << matchList[i]->currentPlayers;
+						}
+						playerList[i]->playerSocket.send(packet);
 					}
 					//players[i]->hasTurn = 1 * i; //"random" method to init the turn
 					//packet.clear();

@@ -11,6 +11,14 @@
 #include <Fleet.h>
 #include <Grid.h>
 
+struct LobbyMatch {
+	int id;
+	std::string name;
+	int numPlayers;
+	LobbyMatch(int _id, std::string _name, int _numPlayers) :id(_id), name(_name), numPlayers(_numPlayers) {};
+};
+
+
 //Send and manage shot information
 void SendFunction(sf::TcpSocket &socket, sf::RenderWindow &window, sf::Event& evento, sf::Mouse& mouseEvent, sf::Socket::Status &statusReceive, PlayerInfo &player1) {
 	sf::Packet packet;
@@ -63,11 +71,10 @@ int main()
 	sf::Socket::Status statusReceive;
 	tcpSocket->setBlocking(false);
 	sf::Packet packet;
-
 	//Bool to control flow of the game
 	bool first = true;
 	bool gameReady = false;
-
+	bool matchLobbyShowed = false;
 	//Init impact dots vector
 	std::vector<sf::CircleShape> impactsDot;
 	sf::String message;
@@ -101,6 +108,13 @@ int main()
 	std::cin >> player1.name;
 	std::cout <<  "type '1' to Search or '2' to Host: ";
 	std::cin >> stateLector;
+	for(;;) {
+		if (stateLector == PlayerInfo::STATE::Search || stateLector == PlayerInfo::STATE::Host) break;
+		std::cout << "Enter a valid option: ";
+		std::cin >> stateLector;
+	}
+	std::vector<LobbyMatch*> matchList;
+
 	player1.currentState = (PlayerInfo::STATE)stateLector;
 	//Fake coordinate
 	player1.coordRegister.push_back(sf::Vector2i(-5, -5));
@@ -143,10 +157,21 @@ int main()
 		//When the player is not ready, receive attributes and init spaceship fleet...
 		if (!player1.isReady) {
 			if (statusReceive == sf::Socket::Done) {
-				packet >> player1.faction >> player1.hasTurn;
-				player1.fleet.ChangeFaction((Faction)player1.faction);
+				if (player1.currentState == PlayerInfo::STATE::Search) {
+					int numMatch = 0;
+					packet >> numMatch;
+					for (int i = 0; i < numMatch; i++) {
+						int id = 0;
+						std::string matchName = "";
+						int numPlayers = 0;
+						packet >> id >> matchName >> numPlayers;
+						matchList.push_back(new LobbyMatch(id, matchName, numPlayers));
+					}
+				}
+				//packet >> player1.faction >> player1.hasTurn;
+				//player1.fleet.ChangeFaction((Faction)player1.faction);
 			}
-			player1.fleet.PlaceFleet(window, evento, mouseEvent, player1.isReady);
+			//player1.fleet.PlaceFleet(window, evento, mouseEvent, player1.isReady);
 		}
 		//When is ready, send the all the grid information to the server
 		else if (first) {
@@ -268,7 +293,12 @@ int main()
 				}
 			}			
 		}
-
+		if (player1.currentState == PlayerInfo::STATE::Search && !matchLobbyShowed) {
+			for (int i = 0; i < matchList.size(); i++) {
+				std::cout << matchList[i]->id << "  -  " << matchList[i]->name << "  " << matchList[i]->numPlayers << "/2" << std::endl;
+			}
+			matchLobbyShowed = true;
+		}
 		//Draw window sprites and text
 		grid1.Render(window);
 		grid2.Render(window);
