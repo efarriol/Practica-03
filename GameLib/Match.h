@@ -12,7 +12,7 @@ public:
 	int turns; 
 	int maxTime;
 	int maxFleetSize;
-	int currentPlayers = 0;
+	int currentPlayers = 1;
 	//Init grids
 	sf::Texture blue_grid;
 	Grid grid;

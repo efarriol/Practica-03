@@ -1,1 +1,9 @@
-﻿  GameClient.vcxproj -> D:\pol_b\Documents\Enti\SourceTree\ProgramacionEnRed\ProgramacionEnRed\Practica-03\x64\Debug\GameClient.exe
+﻿  ClientMain.cpp
+d:\pol_b\documents\enti\sourcetree\programacionenred\programacionenred\practica-03\gameclient\clientmain.cpp(31): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data
+d:\pol_b\documents\enti\sourcetree\programacionenred\programacionenred\practica-03\gameclient\clientmain.cpp(35): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data
+d:\pol_b\documents\enti\sourcetree\programacionenred\programacionenred\practica-03\gameclient\clientmain.cpp(39): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data
+d:\pol_b\documents\enti\sourcetree\programacionenred\programacionenred\practica-03\gameclient\clientmain.cpp(103): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data
+d:\pol_b\documents\enti\sourcetree\programacionenred\programacionenred\practica-03\gameclient\clientmain.cpp(293): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
+d:\pol_b\documents\enti\sourcetree\programacionenred\programacionenred\practica-03\gameclient\clientmain.cpp(460): warning C4244: 'argument': conversion from 'unsigned __int64' to 'float', possible loss of data
+d:\pol_b\documents\enti\sourcetree\programacionenred\programacionenred\practica-03\gameclient\clientmain.cpp(469): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data
+  GameClient.vcxproj -> D:\pol_b\Documents\Enti\SourceTree\ProgramacionEnRed\ProgramacionEnRed\Practica-03\x64\Debug\GameClient.exe

@@ -17,6 +17,8 @@ public:
 	std::vector<std::string> messages;
 	std::string input;
 	int score;
+	bool matchReady = false;
+	bool isInMatch = false;
 	bool isReady;
 	bool hasTurn;
 	bool isImpact;
