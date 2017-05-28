@@ -13,6 +13,7 @@ public:
 	int maxTime;
 	int maxFleetSize;
 	int currentPlayers = 1;
+	bool gameReady = false;
 	//Init grids
 	sf::Texture blue_grid;
 	Grid grid;

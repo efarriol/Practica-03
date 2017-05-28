@@ -1,1 +1,3 @@
-﻿  GameServer.vcxproj -> D:\pol_b\Documents\Enti\SourceTree\ProgramacionEnRed\ProgramacionEnRed\Practica-03\x64\Debug\GameServer.exe
+﻿  ServerMain.cpp
+d:\pol_b\documents\enti\sourcetree\programacionenred\programacionenred\practica-03\gameserver\servermain.cpp(87): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
+  GameServer.vcxproj -> D:\pol_b\Documents\Enti\SourceTree\ProgramacionEnRed\ProgramacionEnRed\Practica-03\x64\Debug\GameServer.exe

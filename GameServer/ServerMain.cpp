@@ -17,13 +17,15 @@ int main(){
 	Grid tempGrid(sf::Vector2i(0, 0), blue_grid);	
 
 	//Bool to control flow of the game
-	bool gameReady = false;
-	bool createMatch = false;
 	//Init players vector
 	std::vector<PlayerInfo*> playerList;
-	playerList.push_back(new PlayerInfo("", ISA, tempGrid));
+	int playerID = 0;
+	playerList.push_back(new PlayerInfo(playerID, "", ISA, tempGrid));
+	playerID++;
 	//Match vector
 	int matchID = 0;
+	int receivedID = 0;
+
 	std::vector<Match*> matchList;
 	sf::String message; //message to send to the clients
 
@@ -59,6 +61,7 @@ int main(){
 					packet >> playerList[i]->name >> tempState;
 					playerList[i]->currentState = (PlayerInfo::STATE)tempState;
 					if (playerList[i]->currentState == PlayerInfo::STATE::Host) {
+						playerList[i]->isHost = true;
 						playerList[i]->isInMatch = true;
 						std::string matchName = "";
 						int turns = 0;
@@ -66,6 +69,7 @@ int main(){
 						int maxFleetSize = 0;
 						packet >> matchName >> turns >> maxTime >> maxFleetSize;
 						matchList.push_back(new Match(matchID, matchName, turns, maxTime, maxFleetSize));
+						playerList[i]->currentMatch = matchList[matchList.size()-1];
 						for (int j = 0; j < playerList.size(); j++) {
 							if (playerList[j]->currentState == PlayerInfo::STATE::Search) {
 								int matchSize = 1;
@@ -81,23 +85,14 @@ int main(){
 						//SEND ALL MATCHES AVAILABLES
 						packet.clear();
 						int matchSize = matchList.size();
-						std::cout << matchSize << std::endl;
-
 						packet << matchSize;
 						for (int j = 0; j < matchList.size(); j++) {
 							packet << matchList[j]->id << matchList[j]->matchName << matchList[j]->currentPlayers;
 						}
 						playerList[i]->playerSocket.send(packet);
 					}
-					//players[i]->hasTurn = 1 * i; //"random" method to init the turn
-					//packet.clear();
-					//packet << i << players[i]->hasTurn;  // "i" refers to the faction (0 ISA, 1 RSF)
-					//players[i]->playerSocket.send(packet);
-					//while (statusAccept == sf::Socket::Partial) { //Handle partial send
-					//	players[i]->playerSocket.send(packet);
-					//	statusAccept = listener.accept(players[i]->playerSocket);
-					//}
-					playerList.push_back(new PlayerInfo("", ISA, tempGrid));
+					playerList.push_back(new PlayerInfo(playerID, "", ISA, tempGrid));
+					playerID++;
 					packet.clear();
 					playerList[i]->firstContact = false;
 				}
@@ -108,119 +103,123 @@ int main(){
 				if (statusReceive == sf::Socket::Done) {
 					if (!playerList[i]->isInMatch) {
 						bool matchExists = false;
-						int matchId;
-						packet >> matchId;
+						packet >> receivedID;
 						//Search Mach
 						for (int j = 0; j < matchList.size(); j++) {
-							if (matchList[j]->id == matchID) {
-								matchList[j]->currentPlayers++;
-								playerList[i]->currentMatch = matchList[j];
-								playerList[i]->isInMatch = true;
-								playerList[i]->matchReady = true;
-								matchExists = true;
-								packet.clear();
-								packet << true;
-								playerList[i]->playerSocket.send(packet);
-								//Search Other player
-								for (int x = 0; x < playerList.size(); x++) {
-									if (playerList[x]->currentState == PlayerInfo::STATE::Host && playerList[x]->currentMatch->id == matchList[j]->id) {
-										playerList[x]->matchReady = true;
-										packet.clear();
-										packet << true;
-										playerList[x]->playerSocket.send(packet);
+							if (matchList[j]->id == receivedID) {
+								if (matchList[j]->currentPlayers < 2) {
+									matchList[j]->currentPlayers++;
+									playerList[i]->currentMatch = matchList[j];
+									playerList[i]->isInMatch = true;
+									playerList[i]->matchReady = true;
+									matchExists = true;
+									packet.clear();
+									packet << playerList[i]->id << true;
+									playerList[i]->playerSocket.send(packet);
+									//Search Other player
+									for (int x = 0; x < playerList.size(); x++) {
+										if (playerList[x]->currentState == PlayerInfo::STATE::Host && playerList[x]->isInMatch) {
+											if (playerList[x]->currentMatch->id == receivedID) {
+												playerList[x]->matchReady = true;
+												playerList[x]->opponent = playerList[i];
+												playerList[i]->opponent = playerList[x];
+												packet.clear();
+												packet << playerList[x]->id << true;
+												playerList[x]->playerSocket.send(packet);
+												break;
+											}
+										}
 									}
+									//Refresh server info to lobby clients
+									for (int k = 0; k < playerList.size(); k++) {
+										if (playerList[k]->currentState == PlayerInfo::STATE::Search) {
+											packet.clear();
+											packet << 1 << matchList[j]->id << matchList[j]->matchName << matchList[j]->currentPlayers;
+											playerList[k]->playerSocket.send(packet);
+										}
+									}
+								}
+								else {
+									packet << false;
+									playerList[i]->playerSocket.send(packet);
 								}
 							}
 						}
 						if (!matchExists) {
-							packet << true;
+							packet << false;
 							playerList[i]->playerSocket.send(packet);
 						}
 					}
-					else {	//When client send grid information...
-						if (!playerList[i]->isReady) {
+					else if(playerList[i]->matchReady){	//When match is ready
+						if (!playerList[i]->isReady) { //When players are not ready yet(grid information)
+							packet >> receivedID;
 							for (int x = 0; x < MAX_CELLS; x++) {
 								for (int y = 0; y < MAX_CELLS; y++) {
 									int value;
 									packet >> value;
-									playerList[i]->grid.SetCell(sf::Vector2i(y, x), value);	//Copy the information to the player grid
+									if(playerList[i]->isHost) playerList[i]->currentMatch->grid.SetCell(sf::Vector2i(y, x), value);	//Copy the information to the player grid
+									else playerList[i]->currentMatch->grid2.SetCell(sf::Vector2i(y, x), value);
 								}
 							}
+							if (playerList[i]->isHost) playerList[i]->grid = playerList[i]->currentMatch->grid;
+							else playerList[i]->grid = playerList[i]->currentMatch->grid2;
 							playerList[i]->isReady = true; //Now player is ready
 						}
 						//When two players are ready, game starts
-						if (playerList[0]->isReady && playerList[1]->isReady) {
+						if (playerList[i]->isReady && playerList[i]->opponent->isReady) {
 							//Send to the players that game has started
-							if (!gameReady) {
-								gameReady = true;
-								packet.clear();
-								packet << gameReady;
-								playerList[i]->playerSocket.send(packet);
-								while (statusReceive == sf::Socket::Partial) {	//Handle partial send
-									playerList[i]->playerSocket.send(packet);
-									statusReceive = playerList[i]->playerSocket.receive(packet);
-								}
-								playerList[i]->playerSocket.send(packet);
-								while (statusReceive == sf::Socket::Partial) {	//Handle partial send
-									playerList[i]->playerSocket.send(packet);
-									statusReceive = playerList[i]->playerSocket.receive(packet);
-								}
-								packet.clear();
-							}
-							else {
+							if(playerList[i]->currentMatch->gameReady){
 								//Start to receive the players shots
 								packet >> playerList[i]->shotCoords.x >> playerList[i]->shotCoords.y;
 
 								message = "";
-								//Create opponents iterators
-								int opponentIt;
-								if (i == 0) opponentIt = 1;
-								else opponentIt = 0;
-
+																
 								//Check the players shots
-								if (playerList[opponentIt]->grid.GetCell(playerList[i]->shotCoords) == 0) { //When is 0, is water
+								if (playerList[i]->opponent->grid.GetCell(playerList[i]->shotCoords) == 0) { //When is 0, is water
 									packet.clear();
 									playerList[i]->hasTurn = false;	//Lose the turn
 									playerList[i]->isImpact = false;
-									playerList[opponentIt]->hasTurn = true;	//Opponent have turn now
-									playerList[opponentIt]->isImpact = false;
+									playerList[i]->opponent->hasTurn = true;	//Opponent have turn now
+									playerList[i]->opponent->isImpact = false;
 								}
 								else {	//Impact whit ship
 									packet.clear();
 									playerList[i]->hasTurn = true;		//Player still having turn
 									playerList[i]->isImpact = true;
-									playerList[opponentIt]->hasTurn = false;
-									playerList[opponentIt]->isImpact = true;
+									playerList[i]->opponent->hasTurn = false;
+									playerList[i]->opponent->isImpact = true;
 
-									int boatId = playerList[opponentIt]->grid.GetCell(playerList[i]->shotCoords); //Get impacted ship ID 
-									playerList[opponentIt]->fleet.GetShip(boatId).TakeDamage();	//Take damage to that ship
+									int boatId = playerList[i]->opponent->grid.GetCell(playerList[i]->shotCoords); //Get impacted ship ID 
+									playerList[i]->opponent->fleet.GetShip(boatId).TakeDamage();	//Take damage to that ship
 									//If that ship have no live points...
-									if (playerList[opponentIt]->fleet.GetShip(boatId).GetDamage() <= 0) {
+									if (playerList[i]->opponent->fleet.GetShip(boatId).GetDamage() <= 0) {
 										//Then ship destroyed
-										playerList[opponentIt]->currentShips--;
-										message = playerList[opponentIt]->fleet.GetShip(boatId).GetBoatName(playerList[opponentIt]->fleet.GetShip(boatId).GetType())
+										playerList[i]->opponent->currentShips--;
+										message = playerList[i]->opponent->fleet.GetShip(boatId).GetBoatName(playerList[i]->opponent->fleet.GetShip(boatId).GetType())
 											+ " SHIP HAS BEEN DESTROYED !";
 									}
 								}
 								//If there are no ships alive, the game is over
-								if (playerList[opponentIt]->currentShips <= 0) {
+								if (playerList[i]->opponent->currentShips <= 0) {
 									message = "GameOver";
 								}
 								//Put all the information to the packet and send to the player
 								packet << playerList[i]->hasTurn << playerList[i]->isImpact << playerList[i]->shotCoords.x << playerList[i]->shotCoords.y << message;
 								playerList[i]->playerSocket.send(packet);
-								while (statusReceive == sf::Socket::Partial) {	//Handle partial send
-									playerList[i]->playerSocket.send(packet);
-									statusReceive = playerList[i]->playerSocket.receive(packet);
-								}
 								packet.clear();
 								//Put all the information to the packet and send to the other player
-								packet << playerList[opponentIt]->hasTurn << playerList[opponentIt]->isImpact << playerList[i]->shotCoords.x << playerList[i]->shotCoords.y << message;
+								packet << playerList[i]->opponent->hasTurn << playerList[i]->opponent->isImpact << playerList[i]->shotCoords.x << playerList[i]->shotCoords.y << message;
+								playerList[i]->opponent->playerSocket.send(packet);
+
+							}
+							else {
+								playerList[i]->currentMatch->gameReady = true;
+								packet.clear();
+								packet << playerList[i]->currentMatch->gameReady;
 								playerList[i]->playerSocket.send(packet);
-								while (statusReceive == sf::Socket::Partial) {	//Handle partial send
-									playerList[i]->playerSocket.send(packet);
-									statusReceive = playerList[i]->playerSocket.receive(packet);
-								}
+								playerList[i]->opponent->playerSocket.send(packet);
+								playerList[i]->playerSocket.send(packet);
+								packet.clear();
 							}
 						}
 					}
@@ -229,26 +228,24 @@ int main(){
 				else if (statusReceive == sf::Socket::Disconnected) {
 					message = "Disconnection";
 					packet << playerList[i]->hasTurn << playerList[i]->isImpact << -15 << -15 << message; //the only important variable is "message"
-					if (i == 0) {
-						playerList[i]->playerSocket.send(packet);
-						while (statusReceive == sf::Socket::Partial) {		//Handle partial send
-							playerList[i]->playerSocket.send(packet);
-							statusReceive = playerList[i]->playerSocket.receive(packet);
-						}
-					}
-					else {
-						playerList[i]->playerSocket.send(packet);
-						while (statusReceive == sf::Socket::Partial) {	//Handle partial send
-							playerList[i]->playerSocket.send(packet);
-							statusReceive = playerList[i]->playerSocket.receive(packet);
-						}
-					}
+					playerList[i]->opponent->playerSocket.send(packet);
 					//Disconnect and delete sockets  and palyers
-					playerList[i]->playerSocket.disconnect();
+
+
+					////Refresh server info to lobby clients
+					//for (int k = 0; k < playerList.size(); k++) {
+					//	if (playerList[k]->currentState == PlayerInfo::STATE::Search  && playerList[k]->id != playerList[i]->id &&playerList[k]->id != playerList[i]->opponent->id) {
+					//		packet.clear();
+					//		packet << 1 << playerList[i]->currentMatch->id << playerList[i]->currentMatch->matchName << 0;
+					//		playerList[k]->playerSocket.send(packet);
+					//	}
+					//}
+
 					//playerList[i]->playerSocket.disconnect();
-					//delete lobbySockets[0], lobbySockets[1];
-					//delete playerList[0], playerList[1];
-					return 0;
+					//playerList[i]->opponent->playerSocket.disconnect();
+					////Delete match
+					//delete playerList[i]->currentMatch;
+					//delete playerList[i];
 				}
 			}
 		}

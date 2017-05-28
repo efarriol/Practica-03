@@ -156,10 +156,6 @@ void SendFunction(sf::TcpSocket &socket, sf::RenderWindow &window, sf::Event& ev
 		player1.hasTurn = false;
 		packet << player1.shotCoords.x << player1.shotCoords.y;
 		socket.send(packet);
-		while (statusReceive == sf::Socket::Partial) { //Handle partial send
-			socket.send(packet);	
-			statusReceive = socket.receive(packet);
-		}
 	}
 }
 
@@ -209,6 +205,7 @@ int main()
 	std::vector <sf::Text> inputTextList;
 	int currentHostInput = 1;
 	bool hostSetupDone = false;
+	bool setupSended = false;
 
 	//Search Text
 	std::vector<MatchText*> matchTextList;
@@ -219,7 +216,7 @@ int main()
 
 	//Init player
 	int stateLector = 0;
-	PlayerInfo player1("", ISA, grid1);
+	PlayerInfo player1(0, "", ISA, grid1);
 	std::cout << "Please, introduce your name: ";
 	std::cin >> player1.name;
 	std::cout << "type '1' to Search or '2' to Host: ";
@@ -240,6 +237,7 @@ int main()
 		packet << player1.name << player1.currentState;
 		tcpSocket->send(packet);
 	}
+	else player1.isHost = true;
 
 
 	//Init Windows
@@ -263,7 +261,7 @@ int main()
 				if (statusReceive == sf::Socket::Done) {
 					if (waitingMatchConfirmation) {
 						bool matchConfirmation = false;
-						packet >> matchConfirmation;
+						packet >> player1.id  >> matchConfirmation;
 						if (matchConfirmation) {
 							//GAMEEEEEEE!!!!!!!!!!!!
 							player1.matchReady = true;
@@ -274,7 +272,7 @@ int main()
 					}
 					else if (searchingPartner) {
 						bool partnerConfirmation = false;
-						packet >> partnerConfirmation;
+						packet >> player1.id >> partnerConfirmation;
 						if (partnerConfirmation) {
 							//GAMEEEEE!!!!!!!!!!!
 							player1.matchReady = true;
@@ -288,9 +286,23 @@ int main()
 							int id = 0;
 							std::string matchName = "";
 							int numPlayers = 0;
+							int matchExists = false;
 							packet >> id >> matchName >> numPlayers;
-							matchList.push_back(new LobbyMatch(id, matchName, numPlayers));
-							matchTextList.push_back(new MatchText(id, matchName, numPlayers, font, matchList.size()));
+							for (int j = 0; j < matchList.size(); j++) {
+								if (matchList[j]->id == id) {
+									if (numPlayers == 0) { //Match finished or deleted
+										matchList.erase(matchList.begin()+j);
+									}
+									matchList[j]->numPlayers = numPlayers;
+									matchTextList[j]->numPlayersText.setString(std::to_string(numPlayers) + "/2");
+									matchExists = true;
+									break;
+								}
+							}
+							if (!matchExists) {
+								matchList.push_back(new LobbyMatch(id, matchName, numPlayers));
+								matchTextList.push_back(new MatchText(id, matchName, numPlayers, font, matchList.size()));
+							}
 						}
 					}
 					//packet >> player1.faction >> player1.hasTurn;
@@ -300,13 +312,14 @@ int main()
 
 				SendLobbyFunction(window, evento, mensaje, player1, inputTextList, font, hostText, currentHostInput, hostSetupDone);
 
-				if (player1.currentState == PlayerInfo::STATE::Host && hostSetupDone) {
+				if (player1.currentState == PlayerInfo::STATE::Host && hostSetupDone && !setupSended) {
 					packet.clear();
 					packet << player1.name << player1.currentState << std::string(inputTextList[0].getString()) << std::stoi(std::string(inputTextList[1].getString())) <<
 						std::stoi(std::string(inputTextList[2].getString())) << std::stoi(std::string(inputTextList[3].getString()));
 					tcpSocket->connect(ip, 5001);
 					tcpSocket->send(packet);
 					searchingPartner = true;
+					setupSended = true;
 				}
 				else if (player1.currentState == PlayerInfo::STATE::Search && evento.key.code == sf::Keyboard::Return && mensaje.getSize() > 0) {
 					packet.clear();
@@ -320,124 +333,121 @@ int main()
 		}
 		//When is ready, send the all the grid information to the server
 		else if (first) {
-			//packet.clear();
-			//for (int i = 0; i < MAX_CELLS; i++) {
-			//	for (int j = 0; j < MAX_CELLS; j++) packet << grid1.GetCell(sf::Vector2i(j, i));
-			//}
-			//tcpSocket->send(packet);
-			//while (statusReceive == sf::Socket::Partial) { //Handle partial send
-			//	tcpSocket->send(packet);
-			//	statusReceive = tcpSocket->receive(packet);
-			//}
-			//packet.clear();
-			//first = false;
+			packet.clear();
+			packet << player1.id;
+			for (int i = 0; i < MAX_CELLS; i++) {
+				for (int j = 0; j < MAX_CELLS; j++) packet << grid1.GetCell(sf::Vector2i(j, i));
+			}
+			tcpSocket->send(packet);
+			packet.clear();
+			first = false;
 		}
 		//When the grid has been sent...
-		//else {
-		//	//When we receive something from the server...
-		//	 if (statusReceive == sf::Socket::Done) {
-		//		 if (!gameReady) {
-		//			 packet >> gameReady; //When the two players are ready
-		//		 }
-		//		 else {
-		//			messageText.setPosition(350, 700);
-		//			message = "";
-		//			//Copy the packet to variables
-		//			packet >> player1.hasTurn >> player1.isImpact >> player1.shotCoords.x >> player1.shotCoords.y >> message;
+		else {
+			//When we receive something from the server...
+			 if (statusReceive == sf::Socket::Done) {
+				 if(gameReady) {
+					messageText.setPosition(350, 700);
+					message = "";
+					//Copy the packet to variables
+					packet >> player1.hasTurn >> player1.isImpact >> player1.shotCoords.x >> player1.shotCoords.y >> message;
 
-		//			//When the other player left the game
-		//			if (message.getSize() > 0 && message == "Disconnection") {
-		//				statusReceive = sf::Socket::Disconnected;
-		//				message = "The enemy left the game, disconnecting";
-		//				messageText.setString(message);
-		//				messageText.setPosition(150, 700);
-		//			}
-		//			else if (statusReceive != sf::Socket::Disconnected) {
-		//				//When the shot is an impact
-		//				if (player1.isImpact) {
-		//					//If player have turn, means that you have hit
-		//					 if (player1.hasTurn) {
-		//						 //Add a red dot to the grid position
-		//						 sf::CircleShape dot(16, 60);
-		//						 dot.setFillColor(sf::Color(159, 93, 100));
-		//						 dot.setPosition(sf::Vector2f((player1.shotCoords.x + 10)*CELL_SIZE + 16, player1.shotCoords.y*CELL_SIZE + 16));
-		//						 impactsDot.push_back(dot);
-		//						 //Check and set message
-		//						 if (message.getSize() > 0) {
-		//							 if (message == "GameOver") {
-		//								 message = "CONGRATULATIONS COMMANDER, YOU WIN!";
-		//								 statusReceive = sf::Socket::Disconnected;
-		//							 }
-		//							 messageText.setPosition(150, 700);
-		//							 messageText.setString(message);
-		//						 }
-		//						 else {
-		//							 messageText.setString("GOOD SHOT SOLDIER !");
-		//						 }
-		//						 messageText.setFillColor(sf::Color(0, 150, 200));
-		//					}
-		//					 //If you don't have turn, means that you have been hit
-		//					 else {
-		//						 //Add a red dot to the grid position
-		//						 sf::CircleShape dot(16, 60);
-		//						 dot.setFillColor(sf::Color(159, 93, 100));
-		//						 dot.setPosition(sf::Vector2f((player1.shotCoords.x)*CELL_SIZE + 16, player1.shotCoords.y*CELL_SIZE + 16));
-		//						 impactsDot.push_back(dot);
-		//						 //Check and set message
-		//						 if (message.getSize() > 0) {
-		//							 if (message == "GameOver") {
-		//								 message = "WITHDRAW COMMANDER, YOU LOSE!";
-		//								 statusReceive = sf::Socket::Disconnected;
-		//							 }
-		//							 messageText.setPosition(150, 700);
-		//							 messageText.setString(message);
-		//						 }
-		//						 else {
-		//							 messageText.setString("ATTENTION, IMPACT !");
+					//When the other player left the game
+					if (message.getSize() > 0 && message == "Disconnection") {
+						statusReceive = sf::Socket::Disconnected;
+						message = "The enemy left the game, disconnecting";
+						messageText.setString(message);
+						messageText.setPosition(150, 700);
+					}
+					else if (statusReceive != sf::Socket::Disconnected) {
+						//When the shot is an impact
+						if (player1.isImpact) {
+							//If player have turn, means that you have hit
+							 if (player1.hasTurn) {
+								 //Add a red dot to the grid position
+								 sf::CircleShape dot(16, 60);
+								 dot.setFillColor(sf::Color(159, 93, 100));
+								 dot.setPosition(sf::Vector2f((player1.shotCoords.x + 10)*CELL_SIZE + 16, player1.shotCoords.y*CELL_SIZE + 16));
+								 impactsDot.push_back(dot);
+								 //Check and set message
+								 if (message.getSize() > 0) {
+									 if (message == "GameOver") {
+										 message = "CONGRATULATIONS COMMANDER, YOU WIN!";
+										 statusReceive = sf::Socket::Disconnected;
+									 }
+									 messageText.setPosition(150, 700);
+									 messageText.setString(message);
+								 }
+								 else {
+									 messageText.setString("GOOD SHOT SOLDIER !");
+								 }
+								 messageText.setFillColor(sf::Color(0, 150, 200));
+							}
+							 //If you don't have turn, means that you have been hit
+							 else {
+								 //Add a red dot to the grid position
+								 sf::CircleShape dot(16, 60);
+								 dot.setFillColor(sf::Color(159, 93, 100));
+								 dot.setPosition(sf::Vector2f((player1.shotCoords.x)*CELL_SIZE + 16, player1.shotCoords.y*CELL_SIZE + 16));
+								 impactsDot.push_back(dot);
+								 //Check and set message
+								 if (message.getSize() > 0) {
+									 if (message == "GameOver") {
+										 message = "WITHDRAW COMMANDER, YOU LOSE!";
+										 statusReceive = sf::Socket::Disconnected;
+									 }
+									 messageText.setPosition(150, 700);
+									 messageText.setString(message);
+								 }
+								 else {
+									 messageText.setString("ATTENTION, IMPACT !");
 
-		//						 }
-		//						 messageText.setFillColor(sf::Color(159, 93, 100));
-		//					 }
+								 }
+								 messageText.setFillColor(sf::Color(159, 93, 100));
+							 }
 
-		//				 }
-		//				//When the shot is not an impact
-		//				 else {
-		//					 //If you have turn, means that the opponent have missed the shot
-		//					 if (player1.hasTurn) {
-		//						 //Add a blue dot to the grid position
-		//						 sf::CircleShape dot(16, 60);
-		//						 dot.setFillColor(sf::Color(3, 142, 165));
-		//						 dot.setPosition(sf::Vector2f((player1.shotCoords.x)*CELL_SIZE + 16, player1.shotCoords.y*CELL_SIZE + 16));
-		//						 impactsDot.push_back(dot);
-		//						 //Change message to draw
-		//						 messageText.setString("ENEMY MISSED THE SHOT !");
-		//						 messageText.setFillColor(sf::Color(159, 93, 100));
+						 }
+						//When the shot is not an impact
+						 else {
+							 //If you have turn, means that the opponent have missed the shot
+							 if (player1.hasTurn) {
+								 //Add a blue dot to the grid position
+								 sf::CircleShape dot(16, 60);
+								 dot.setFillColor(sf::Color(3, 142, 165));
+								 dot.setPosition(sf::Vector2f((player1.shotCoords.x)*CELL_SIZE + 16, player1.shotCoords.y*CELL_SIZE + 16));
+								 impactsDot.push_back(dot);
+								 //Change message to draw
+								 messageText.setString("ENEMY MISSED THE SHOT !");
+								 messageText.setFillColor(sf::Color(159, 93, 100));
 
-		//					 }
-		//					 //If not, you have missed the shot
-		//					 else {
-		//						 //Add a blue dot to the grid position
-		//						 sf::CircleShape dot(16, 60);
-		//						 dot.setFillColor(sf::Color(3, 142, 165));
-		//						 dot.setPosition(sf::Vector2f((player1.shotCoords.x + 10)*CELL_SIZE + 16, player1.shotCoords.y*CELL_SIZE + 16));
-		//						 impactsDot.push_back(dot);
-		//						 //Change message to draw
-		//						 messageText.setString("YOU MISSED THE SHOT !");
-		//						 messageText.setFillColor(sf::Color(0, 150, 200));
-		//					 }
-		//				 }
-		//			 }
-		//		 }
-		//		}
-		//	//When we receive nothing from the server...
-		//	else if (statusReceive == sf::Socket::NotReady) {
-		//		window.pollEvent(evento);
-		//		//If player have turn, send shot information...
-		//		if (player1.hasTurn && gameReady) { 
-		//			SendFunction(*tcpSocket, window, evento, mouseEvent, statusReceive, player1);
-		//		}
-		//	}			
-		//}
+							 }
+							 //If not, you have missed the shot
+							 else {
+								 //Add a blue dot to the grid position
+								 sf::CircleShape dot(16, 60);
+								 dot.setFillColor(sf::Color(3, 142, 165));
+								 dot.setPosition(sf::Vector2f((player1.shotCoords.x + 10)*CELL_SIZE + 16, player1.shotCoords.y*CELL_SIZE + 16));
+								 impactsDot.push_back(dot);
+								 //Change message to draw
+								 messageText.setString("YOU MISSED THE SHOT !");
+								 messageText.setFillColor(sf::Color(0, 150, 200));
+							 }
+						 }
+					 }
+				 }
+				 else {
+					 packet >> gameReady; //When the two players are ready
+				 }
+			}
+			//When we receive nothing from the server...
+			else if (statusReceive == sf::Socket::NotReady) {
+				window.pollEvent(evento);
+				//If player have turn, send shot information...
+				if (player1.hasTurn && gameReady) { 
+					SendFunction(*tcpSocket, window, evento, mouseEvent, statusReceive, player1);
+				}
+			}			
+		}
 
 		//Draw window sprites and text
 
@@ -458,7 +468,6 @@ int main()
 				std::string mensaje2 = mensaje + "_";
 				inputMessage.setString("Introduce match ID to join: " + mensaje2);
 				inputMessage.setPosition(10, (matchTextList.size()+1) * 50);
-				std::cout << matchTextList.size() << std::endl;
 				window.draw(inputMessage);
 			}
 			else if (player1.currentState == PlayerInfo::STATE::Host) {
@@ -467,7 +476,13 @@ int main()
 				std::string mensaje2 = mensaje + "_";
 				inputMessage.setString(mensaje2);
 				inputMessage.setPosition(450, currentHostInput * 50);
-				window.draw(inputMessage);
+				if(!hostSetupDone)window.draw(inputMessage);
+				else {
+					sf::Text banner("---Searching Player, Please Wait---", font, 25);
+					banner.setFillColor(sf::Color(0, 160, 160));
+					banner.setPosition(0, currentHostInput*50);
+					window.draw(banner);
+				}
 			}
 		}
 		window.display();
